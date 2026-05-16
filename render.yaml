@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: team-task-manager
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build && npx prisma migrate deploy
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXTAUTH_URL
+        fromService:
+          type: web
+          name: team-task-manager
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: NEXTAUTH_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false

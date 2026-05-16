@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { signIn } from 'next-auth/react'
+import { useEffect, useState } from 'react'
+import { signIn, useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -9,7 +9,8 @@ import { z } from 'zod'
 
 const loginSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(6)
+  password: z.string().min(6),
+  name: z.string().min(2).optional()
 })
 
 type LoginForm = z.infer<typeof loginSchema>
@@ -18,9 +19,16 @@ export default function LoginPage() {
   const [isSignup, setIsSignup] = useState(false)
   const [error, setError] = useState('')
   const router = useRouter()
+  const { data: session, status } = useSession()
   const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema)
   })
+
+  useEffect(() => {
+    if (status === 'authenticated') {
+      router.push('/dashboard')
+    }
+  }, [router, status])
 
   const onSubmit = async (data: LoginForm) => {
     setError('')
@@ -31,32 +39,42 @@ export default function LoginPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       })
-      if (res.ok) {
-        const result = await signIn('credentials', {
-          email: data.email,
-          password: data.password,
-          redirect: false
-        })
-        if (result?.ok) {
-          router.push('/dashboard')
-        } else {
-          setError('Unable to sign in after signup.')
-        }
-      } else {
-        setError('Signup failed. Please try again.')
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        setError(body?.error ?? 'Signup failed. Please try again.')
+        return
       }
-    } else {
+
       const result = await signIn('credentials', {
         email: data.email,
         password: data.password,
-        redirect: false
+        redirect: false,
+        callbackUrl: '/dashboard'
       })
-      if (result?.ok) {
-        router.push('/dashboard')
-      } else {
-        setError('Invalid email or password.')
+
+      if (result?.error) {
+        setError(result.error)
+        return
       }
+
+      router.push(result?.url ?? '/dashboard')
+      return
     }
+
+    const result = await signIn('credentials', {
+      email: data.email,
+      password: data.password,
+      redirect: false,
+      callbackUrl: '/dashboard'
+    })
+
+    if (result?.error) {
+      setError(result.error || 'Invalid email or password.')
+      return
+    }
+
+    router.push(result?.url ?? '/dashboard')
   }
 
   return (
@@ -89,6 +107,20 @@ export default function LoginPage() {
               <h2 className="mt-3 text-3xl font-semibold text-white">{isSignup ? 'Register' : 'Sign in'}</h2>
             </div>
             {error && <p className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</p>}
+
+            {isSignup && (
+              <div className="space-y-4">
+                <label className="block text-sm font-medium text-slate-200">
+                  Full Name
+                  <input
+                    {...register('name')}
+                    type="text"
+                    className="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-slate-100 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
+                  />
+                </label>
+                {errors.name && <p className="text-sm text-red-400">{errors.name.message}</p>}
+              </div>
+            )}
 
             <div className="space-y-4">
               <label className="block text-sm font-medium text-slate-200">
